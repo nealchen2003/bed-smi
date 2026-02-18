@@ -82,10 +82,7 @@ def make_table():
             if last_updated:
                 delta = datetime.now() - last_updated
                 seconds = int(delta.total_seconds())
-                if seconds == 0:
-                    status = "[green]Just now[/green]"
-                else:
-                    status = f"[green]{seconds}s ago[/green]"
+                status = f"[green]{seconds}s ago[/green]"
 
         if not gpus:
             table.add_row(name, "...", "...", "...", "...", status)
