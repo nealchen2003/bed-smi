@@ -42,7 +42,8 @@ async def get_gpu_async(name, server_info):
         if proc.returncode == 0:
             result = stdout.decode().strip().split("\n")
             server_states[name]["gpus"] = result
-            server_states[name]["status"] = f"[dim]Updated {datetime.now().strftime('%H:%M:%S')}[/dim]"
+            server_states[name]["last_updated"] = datetime.now()
+            server_states[name]["status"] = "OK"
         else:
             server_states[name]["gpus"] = []
             server_states[name]["status"] = "[red]SSH Error[/red]"
@@ -69,12 +70,22 @@ def make_table():
     table.add_column("Util %")
     table.add_column("Mem Used / MB")
     table.add_column("Mem Total / MB")
-    table.add_column("Status")
+    table.add_column("Last Update")
 
     for name, server_info in servers.items():
         state = server_states.get(name, {"gpus": [], "status": "[dim]Waiting...[/dim]"})
         status = state.get("status", "[dim]Unknown[/dim]")
         gpus = state.get("gpus", [])
+
+        if status == "OK":
+            last_updated = state.get("last_updated")
+            if last_updated:
+                delta = datetime.now() - last_updated
+                seconds = int(delta.total_seconds())
+                if seconds == 0:
+                    status = "[green]Just now[/green]"
+                else:
+                    status = f"[green]{seconds}s ago[/green]"
 
         if not gpus:
             table.add_row(name, "...", "...", "...", "...", status)
