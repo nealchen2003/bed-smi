@@ -22,6 +22,8 @@ A simple tool to monitor GPU usage of multiple servers. It uses `nvidia-smi` to 
 
    For advanced configurations, use with `.ssh/config`!
 
+   Make sure to manually login to the servers at least once to add them to the known hosts.
+
 3. Run the script:
 
    ```
