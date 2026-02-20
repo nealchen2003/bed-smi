@@ -62,15 +62,14 @@ async def server_loop(name, info):
         await asyncio.sleep(5)
 
 
-def make_table():
-    table = Table(title="GPU Monitor")
+def wrap_mib_to_gib(mib_str):
+    mib = int(mib_str)
+    gib = mib / 1024
+    return f"{gib:>4.1f}"
 
-    table.add_column("Server")
-    table.add_column("GPU")
-    table.add_column("Util %")
-    table.add_column("Mem Used / MB")
-    table.add_column("Mem Total / MB")
-    table.add_column("Last Update")
+
+def make_table():
+    table = Table("Server", "GPU", "Util", "Memory", "Status")
 
     for name, server_info in servers.items():
         state = server_states.get(name, {"gpus": [], "status": "[dim]Waiting...[/dim]"})
@@ -85,7 +84,7 @@ def make_table():
                 status = f"[green]{seconds}s ago[/green]"
 
         if not gpus:
-            table.add_row(name, "...", "...", "...", "...", status)
+            table.add_row(name, "...", "...", "...", status)
             continue
 
         for idx, gpu in enumerate(gpus):
@@ -103,11 +102,14 @@ def make_table():
                 util, mem_used, mem_total = parts[:3]
                 broken = False
             if broken:
-                util = mem_used = mem_total = "[red]ERR[/red]"
+                util = memory = "[red]ERR[/red]"
+            else:
+                util += "%"
+                memory = wrap_mib_to_gib(mem_used) + " / " + wrap_mib_to_gib(mem_total) + " GiB"
 
             # Only show status on the first row for this server
             row_status = status if idx == 0 else ""
-            table.add_row(name if idx == 0 else "", str(idx), util, mem_used, mem_total, row_status)
+            table.add_row(name if idx == 0 else "", str(idx), util, memory, row_status)
 
     return table
 
