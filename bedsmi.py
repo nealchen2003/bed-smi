@@ -1,4 +1,5 @@
 import asyncio
+import asyncssh
 from datetime import datetime
 from typing import NamedTuple
 from rich.live import Live
@@ -10,56 +11,66 @@ servers = {}
 server_states = {}
 
 
-async def get_gpu_async(name, server_info):
+async def server_loop(name, info):
     if name not in server_states:
         server_states[name] = {"gpus": [], "status": "[dim]Waiting...[/dim]"}
 
-    server_states[name]["status"] = "[yellow]Refreshing...[/yellow]"
-    server, check_err = server_info.address, server_info.check_err
+    server, check_err = info.address, info.check_err
+    ssh_params = {}
+    if "@" in server:
+        username, host = server.split("@", 1)
+        ssh_params["username"] = username
+    else:
+        host = server
+    if ":" in host:
+        host, port_str = host.split(":", 1)
+        ssh_params["port"] = int(port_str)
 
     if check_err:
         query_fields = "utilization.gpu,memory.used,memory.total,reset_status.reset_required"
     else:
         query_fields = "utilization.gpu,memory.used,memory.total"
 
-    cmd = f'ssh -o ConnectTimeout=5 {server} "nvidia-smi --query-gpu={query_fields} --format=csv,noheader,nounits"'
+    cmd = f"nvidia-smi --query-gpu={query_fields} --format=csv,noheader,nounits"
 
-    try:
-        proc = await asyncio.create_subprocess_shell(
-            cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-        )
-        try:
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=8.0)
-        except asyncio.TimeoutError:
-            try:
-                proc.kill()
-            except ProcessLookupError:
-                pass
-            server_states[name]["gpus"] = []
-            server_states[name]["status"] = "[red]Timeout[/red]"
-            return
-
-        if proc.returncode == 0:
-            result = stdout.decode().strip().split("\n")
-            server_states[name]["gpus"] = result
-            server_states[name]["last_updated"] = datetime.now()
-            server_states[name]["status"] = "OK"
-        else:
-            server_states[name]["gpus"] = []
-            server_states[name]["status"] = "[red]SSH Error[/red]"
-
-    except Exception as e:
-        server_states[name]["gpus"] = []
-        server_states[name]["status"] = f"[red]{str(e)}[/red]"
-
-
-async def server_loop(name, info):
-    if name not in server_states:
-        server_states[name] = {"gpus": [], "status": "[dim]Waiting...[/dim]"}
-
+    conn = None
     while True:
-        await get_gpu_async(name, info)
-        await asyncio.sleep(5)
+        try:
+            # Reconnect if necessary
+            if conn is None:
+                server_states[name]["status"] = "[dim]Connecting...[/dim]"
+                conn = await asyncssh.connect(host, connect_timeout=5, **ssh_params)
+
+            # Refresh data
+            result = await conn.run(cmd, check=True, timeout=5)
+            if isinstance(result.stdout, str):
+                server_states[name]["gpus"] = result.stdout.strip().split("\n")
+                server_states[name]["last_updated"] = datetime.now()
+                server_states[name]["status"] = "OK"
+            else:
+                # Unexpected output type
+                server_states[name]["status"] = "[red]Output Error[/red]"
+
+            await asyncio.sleep(5)
+
+        except (OSError, asyncssh.Error, asyncio.TimeoutError) as e:
+            server_states[name]["gpus"] = []
+
+            if isinstance(e, (asyncssh.ProcessError, asyncio.TimeoutError)):
+                error_msg = f"[red]Cmd Error: {type(e).__name__}[/red]"
+            else:
+                error_msg = f"[red]Conn Error: {str(e)}[/red]"
+
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+                conn = None
+
+            server_states[name]["status"] = error_msg
+            # Wait a bit before retrying connection
+            await asyncio.sleep(5)
 
 
 def wrap_mib_to_gib(mib_str):

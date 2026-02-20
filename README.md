@@ -6,7 +6,7 @@ A simple tool to monitor GPU usage of multiple servers. It uses `nvidia-smi` to 
 
 ## Usage
 
-1. pip install rich
+1. pip install asyncssh rich
 
 2. Create a file named `servers` (or any name you prefer) and list your servers in the following format:
 
@@ -17,7 +17,7 @@ A simple tool to monitor GPU usage of multiple servers. It uses `nvidia-smi` to 
    E.g.,
 
    ```
-   01 nealchen@***.illinois.edu check-err
+   01 nealchen@***.illinois.edu:22 check-err
    ```
 
    For advanced configurations, use with `.ssh/config`!
